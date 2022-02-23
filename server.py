@@ -1,71 +1,77 @@
-import socket
+""" Script for TCP chat server - relays messages to all clients """
+
+from socket import AF_INET, socket, SOCK_STREAM
 from threading import Thread
 
-# server's IP address
-SERVER_HOST = "127.0.0.1"
-SERVER_PORT = 55000 # port we want to use
-separator_token = "<SEP>" # we will use this to separate the client name & message
+clients = {}
+addresses = {}
 
-# initialize list/set of all connected client's sockets
-client_sockets = set()
-users = {}
-# create a TCP socket
-s = socket.socket()
-# make the port as reusable port
-s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-# bind the socket to the address we specified
-s.bind((SERVER_HOST, SERVER_PORT))
-# listen for upcoming connections
-s.listen(5)
-print(f"[*] Listening as {SERVER_HOST}:{SERVER_PORT}")
+HOST = "127.0.0.1"
+PORT = 5000
+BUFSIZ = 1024
+ADDR = (HOST, PORT)
+SOCK = socket(AF_INET, SOCK_STREAM)
+SOCK.bind(ADDR)
 
-def listen_for_client(cs):
-    """
-    This function keep listening for a message from `cs` socket
-    Whenever a message is received, broadcast it to all other connected clients
-    """
 
+def accept_incoming_connections():
+    """Sets up handling for incoming clients."""
     while True:
-        try:
-            # keep listening for a message from `cs` socket
-            msg = cs.recv(1024).decode()
-            if msg.startswith('^.^'):
-                client_name = msg[3:]
-                if not users.keys().__contains__(client_name):
-                    cs.send('sababa'.encode())
-                    users[client_name] = cs
-            nekudotaim = msg.index(':')
-            actual_msg = msg[nekudotaim:]
-            if actual_msg.startswith('@all'):
-                for sock in client_sockets:
-                    sock.send(actual_msg.encode())
-            if actual_msg.startswith('@@'):
-                nekudotaim2 = actual_msg.index(':')
-                name = actual_msg[2:nekudotaim2]
-                users[name].send(actual_msg[nekudotaim2+1:])
+        client, client_address = SOCK.accept()
+        print("%s:%s has connected." % client_address)
+        client.send("Greetings from the ChatRoom! ".encode("utf8"))
+        client.send("Now type your name and press enter!".encode("utf8"))
+        addresses[client] = client_address
+        Thread(target=handle_client, args=(client, client_address)).start()
 
-        except Exception as e:
-            # client no longer connected
-            # remove it from the set
-            print(f"[!] Error: {e}")
-            client_sockets.remove(cs)
 
-while True:
-    # we keep listening for new connections all the time
-    client_socket, client_address = s.accept()
-    print(f"[+] {client_address} connected.")
+def handle_client(conn, addr):  # Takes client socket as argument.
+    """Handles a single client connection."""
+    name = conn.recv(BUFSIZ).decode("utf8")
+    welcome = 'Welcome %s! If you ever want to quit, type #quit to exit.' % name
+    conn.send(bytes(welcome, "utf8"))
+    msg = "%s from [%s] has joined the chat!" % (name, "{}:{}".format(addr[0], addr[1]))
+    broadcast(bytes(msg, "utf8"))
+    clients[conn] = name
+    print(clients)
+    while True:
+        msg = conn.recv(BUFSIZ)
+        if msg != bytes("#quit", "utf8"):
+            broadcast(msg, name + ": ")
+        else:
+            conn.send(bytes("#quit", "utf8"))
+            conn.close()
+            del clients[conn]
+            broadcast(bytes("%s has left the chat." % name, "utf8"))
+            break
 
-    # add the new connected client to connected sockets
-    client_sockets.add(client_socket)
-    # start a new thread that listens for each client's messages
-    t = Thread(target=listen_for_client, args=(client_socket,))
-    # make the thread daemon so it ends whenever the main thread ends
-    t.daemon = True
-    # start the thread
-    t.start()
 
-# close client sockets
-for cs in client_sockets:
-    cs.close()
-# close server socket
-s.close()
+def broadcast(msg, prefix=""):  # prefix is for name identification.
+    """Broadcasts a message to all the clients."""
+    if msg.startswith('@'.encode()):
+        for name in clients.values():
+            sock = get_key(name)
+            print(msg[1:5], name)
+            if msg[1:5].decode() == name:
+                actual_message = msg[5:]
+                print("actual: ", actual_message)
+                sock.send(bytes(prefix, "utf8") + actual_message)
+    else:
+        for sock in clients:
+            sock.send(bytes(prefix, "utf8") + msg)
+
+
+def get_key(val):
+    for key, value in clients.items():
+        if val == value:
+            return key
+
+
+if __name__ == "__main__":
+    SOCK.listen(5)  # Listens for 5 connections at max.
+    print("Chat Server has Started !!")
+    print("Waiting for connections...")
+    ACCEPT_THREAD = Thread(target=accept_incoming_connections)
+    ACCEPT_THREAD.start()  # Starts the infinite loop.
+    ACCEPT_THREAD.join()
+    SOCK.close()

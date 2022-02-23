@@ -1,60 +1,85 @@
-import socket
-import random
-import time
+import tkinter
+from socket import AF_INET, socket, SOCK_STREAM
 from threading import Thread
-from datetime import datetime
 
 
-# server's IP address
-# if the server is not on this machine,
-# put the private (network) IP address (e.g 192.168.1.2)
-SERVER_HOST = "127.0.0.1"
-SERVER_PORT = 55000 # server's port
-separator_token = "<SEP>" # we will use this to separate the client name & message
-
-# initialize TCP socket
-s = socket.socket()
-print(f"[*] Connecting to {SERVER_HOST}:{SERVER_PORT}...")
-# connect to the server
-s.connect((SERVER_HOST, SERVER_PORT))
-print("[+] Connected.")
-
-# prompt the client for a name
-name = input("Enter your name: ")
-while True:
-    s.send(('^.^' + name).encode())
-    approval = s.recv(1024)
-    if approval.decode() == 'sababa':
-        print('You are connected as ' + name)
-        break
-    else:
-        name = input('Username already exists, try different username')
-        print()
-
-
-def listen_for_messages():
+def receive():
+    """ Handles receiving of messages. """
     while True:
-        message = s.recv(1024).decode()
-        print("\n" + message)
+        try:
+            msg = sock.recv(BUFSIZ).decode("utf8")
+            msg_list.insert(tkinter.END, msg)
+        except OSError:  # Possibly client has left the chat.
+            break
 
-# make a thread that listens for messages to this client & print them
-t = Thread(target=listen_for_messages)
-# make the thread daemon so it ends whenever the main thread ends
-t.daemon = True
-# start the thread
-t.start()
 
-while True:
-    # input message we want to send to the server
-    to_send =  input()
-    # a way to exit the program
-    if to_send.lower() == 'q':
-        break
-    # add the datetime, name & the color of the sender
-    date_now = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-    to_send = f"[{date_now}] {name}{separator_token}{to_send}"
-    # finally, send the message
-    s.send(to_send.encode())
+def send(event=None):
+    """ Handles sending of messages. """
+    msg = my_msg.get()
+    my_msg.set("")  # Clears input field.
+    sock.send(bytes(msg, "utf8"))
+    if msg == "#quit":
+        sock.close()
+        top.quit()
 
-# close the socket
-s.close()
+
+def on_closing(event=None):
+    """ This function is to be called when the window is closed. """
+    my_msg.set("#quit")
+    send()
+
+
+# def smiley_button_tieup(event=None):
+#     """ Function for smiley button action """
+#     my_msg.set(":)")    # A common smiley character
+#     send()
+
+
+# def sad_button_tieup(event=None):
+#     """ Function for smiley button action """
+#     my_msg.set(":(")    # A common smiley character
+#     send()
+
+
+top = tkinter.Tk()
+top.title("Simple Chat Client v1.0")
+messages_frame = tkinter.Frame(top)
+
+my_msg = tkinter.StringVar()  # For the messages to be sent.
+my_msg.set("")
+scrollbar = tkinter.Scrollbar(messages_frame)  # To navigate through past messages.
+msg_list = tkinter.Listbox(messages_frame, height=15, width=70, yscrollcommand=scrollbar.set)
+scrollbar.pack(side=tkinter.RIGHT, fill=tkinter.Y)
+msg_list.pack(side=tkinter.LEFT, fill=tkinter.BOTH)
+msg_list.pack()
+
+messages_frame.pack()
+
+button_label = tkinter.Label(top, text="Enter Message:")
+button_label.pack()
+entry_field = tkinter.Entry(top, textvariable=my_msg, foreground="Red")
+entry_field.bind("<Return>", send)
+entry_field.pack()
+send_button = tkinter.Button(top, text="Send", command=send)
+send_button.pack()
+# smiley_button = tkinter.Button(top, text=":)", command=smiley_button_tieup)
+# smiley_button.pack()
+# sad_button = tkinter.Button(top, text=":(", command=sad_button_tieup)
+# sad_button.pack()
+
+quit_button = tkinter.Button(top, text="Quit", command=on_closing)
+quit_button.pack()
+
+top.protocol("WM_DELETE_WINDOW", on_closing)
+
+
+HOST = "127.0.0.1"
+PORT = 5000
+BUFSIZ = 1024
+ADDR = (HOST, PORT)
+sock = socket(AF_INET, SOCK_STREAM)
+sock.connect(ADDR)
+
+receive_thread = Thread(target=receive)
+receive_thread.start()
+tkinter.mainloop()  # Starts GUI execution.
