@@ -1,5 +1,4 @@
-""" Script for TCP chat server - relays messages to all clients """
-
+import time
 from socket import AF_INET, socket, SOCK_STREAM
 from threading import Thread
 
@@ -33,13 +32,12 @@ def handle_client(conn, addr):  # Takes client socket as argument.
     msg = "%s from [%s] has joined the chat!" % (name, "{}:{}".format(addr[0], addr[1]))
     broadcast(bytes(msg, "utf8"))
     clients[conn] = name
-    print(clients)
     while True:
         msg = conn.recv(BUFSIZ)
         if msg != bytes("#quit", "utf8"):
             broadcast(msg, name + ": ")
         else:
-            conn.send(bytes("#quit", "utf8"))
+            # conn.send(bytes("#quit", "utf8"))
             conn.close()
             del clients[conn]
             broadcast(bytes("%s has left the chat." % name, "utf8"))
@@ -51,10 +49,9 @@ def broadcast(msg, prefix=""):  # prefix is for name identification.
     if msg.startswith('@'.encode()):
         for name in clients.values():
             sock = get_key(name)
-            print(msg[1:5], name)
-            if msg[1:5].decode() == name:
-                actual_message = msg[5:]
-                print("actual: ", actual_message)
+            name_len = len(name)
+            if msg[1:1+name_len].decode() == name:
+                actual_message = msg[1+name_len:]
                 sock.send(bytes(prefix, "utf8") + actual_message)
     else:
         for sock in clients:

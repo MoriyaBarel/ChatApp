@@ -2,10 +2,15 @@ import tkinter
 from socket import AF_INET, socket, SOCK_STREAM
 from threading import Thread
 
+flag = False
+
 
 def receive():
     """ Handles receiving of messages. """
+    global flag
     while True:
+        if flag:
+            break
         try:
             msg = sock.recv(BUFSIZ).decode("utf8")
             msg_list.insert(tkinter.END, msg)
@@ -15,10 +20,12 @@ def receive():
 
 def send(event=None):
     """ Handles sending of messages. """
+    global flag
     msg = my_msg.get()
     my_msg.set("")  # Clears input field.
     sock.send(bytes(msg, "utf8"))
     if msg == "#quit":
+        flag = True
         sock.close()
         top.quit()
 
@@ -29,10 +36,9 @@ def on_closing(event=None):
     send()
 
 
-# def smiley_button_tieup(event=None):
-#     """ Function for smiley button action """
-#     my_msg.set(":)")    # A common smiley character
-#     send()
+def get_users_button(event=None):
+    my_msg.set("")
+    send("get users")
 
 
 # def sad_button_tieup(event=None):
@@ -42,7 +48,7 @@ def on_closing(event=None):
 
 
 top = tkinter.Tk()
-top.title("Simple Chat Client v1.0")
+top.title("ChatApp")
 messages_frame = tkinter.Frame(top)
 
 my_msg = tkinter.StringVar()  # For the messages to be sent.
@@ -62,8 +68,8 @@ entry_field.bind("<Return>", send)
 entry_field.pack()
 send_button = tkinter.Button(top, text="Send", command=send)
 send_button.pack()
-# smiley_button = tkinter.Button(top, text=":)", command=smiley_button_tieup)
-# smiley_button.pack()
+users_button = tkinter.Button(top, text="Users", command=get_users_button)
+users_button.pack()
 # sad_button = tkinter.Button(top, text=":(", command=sad_button_tieup)
 # sad_button.pack()
 
@@ -83,3 +89,4 @@ sock.connect(ADDR)
 receive_thread = Thread(target=receive)
 receive_thread.start()
 tkinter.mainloop()  # Starts GUI execution.
+
