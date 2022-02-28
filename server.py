@@ -1,13 +1,11 @@
-""" Script for TCP chat server - relays messages to all clients """
 import os
-import threading
 import time
 from socket import AF_INET, socket, SOCK_STREAM, SOCK_DGRAM
 from threading import Thread
 
 clients = {}
 addresses = {}
-files = ["holla", "aaa", "dog"]
+files = ["Holla", "aaa", "dog"]
 
 HOST = "127.0.0.1"
 PORT = 5000
@@ -16,9 +14,6 @@ ADDR = (HOST, PORT)
 SOCK = socket(AF_INET, SOCK_STREAM)
 SOCK.bind(ADDR)
 udp_socket = socket(AF_INET, SOCK_DGRAM)
-
-
-# UDP_SOCK = socket(AF_INET, SOCK_DGRAM)
 
 
 def accept_incoming_connections():
@@ -40,58 +35,31 @@ def handle_client(conn, addr):  # Takes client socket as argument.
     msg = "%s from [%s] has joined the chat!" % (name, "{}:{}".format(addr[0], addr[1]))
     broadcast(bytes(msg, "utf8"))
     clients[conn] = name
-    print(clients)
-
     while True:
         msg = conn.recv(BUFSIZ)
         if msg == bytes("!request", "utf8"):
-            Thread(target=requestfile(conn, msg))
-
+            Thread(target=request_file(conn, msg))
         elif msg.startswith("##".encode()):
-            Thread(target=sendf(conn, msg))
-
-
+            Thread(target=send_file(conn, msg))
         elif msg == bytes("#getusers", "utf8"):
-            getusers(conn, msg, "connected users: ")
-
+            get_users(conn, msg, "connected users: ")
         elif msg != bytes("#quit", "utf8"):
             broadcast(msg, name + ": ")
-        # elif msg == bytes("#quit", "utf8"):
-        #     quitchat(conn)
-        #     break
         else:
-            # conn.send(bytes("#quit", "utf8"))
             del clients[conn]
-            broadcast2(bytes("%s has left the chat." % name, "utf8"))
-            # for sock in clients:
-            #     sock.send(bytes("%s has left the chat." % name, "utf8"))
+            broadcast(bytes("%s has left the chat." % name, "utf8"))
             conn.close()
             break
 
 
-def sendf(conn, msg):
-    #msg_str = msg.decode()
-    filenameandfiletypetemp, filenametemptemp, file_typetemp, savetemp = get_filename_and_filetype(msg)
-    filename2=str(filenametemptemp)
-    file_type=str(file_typetemp)
-    final_save = str(savetemp)
-    save=final_save[1:-1]
-    print("save: ", save)
-    print(type(save))
-    filename = filename2[2:]
-    filenameandfiletype = filenameandfiletypetemp[2:]
-
-
-
-    # print("filename is :", filename)
-    # print("the type is:", type(filename))
-    if not files.__contains__(filename):
+def send_file(conn, msg):
+    file_name_and_type, file_name, file_type, save_as = get_filename_and_filetype(msg)
+    if not files.__contains__(file_name):
         conn.send('error: no file was requested'.encode())
     else:
-        # print("what we need:",filenameandfiletype)
-        path = os.path.abspath("dog.jpg")
-        file_size = os.path.getsize("dog.jpg")
-        conn.send(f'##download{"#"}{save}{"#"}{file_type}{"#"}{file_size}'.encode())
+        path = os.path.abspath(file_name_and_type)
+        file_size = os.path.getsize(file_name_and_type)
+        conn.send(f'##download{"#"}{save_as}{"#"}{file_type}{"#"}{file_size}'.encode())
         sent = 0
         file = open(path, 'rb')
         while True:
@@ -106,37 +74,25 @@ def sendf(conn, msg):
         file.close()
 
 
-def get_filename_and_filetype(msg_str: str):
-    actual_msg = msg_str[2:]
-    mstr = actual_msg.split('#'.encode())
-    filenameandfiletype = mstr[0]
-    save = mstr[1]
-    file = str(filenameandfiletype).split('.')
+def get_filename_and_filetype(msg: bytes):
+    actual_msg = msg[2:]
+    msg_str = actual_msg.decode("utf-8").split("#")
+    file_name_and_type = msg_str[0]
+    save_as = msg_str[1]
+    file = file_name_and_type.split('.')
     filename = file[0]
     file_type = file[1]
-    return filenameandfiletype, filename, file_type, save
+    return file_name_and_type, filename, file_type, save_as
 
 
-# def quitchat(conn):
-#     name = conn.recv(BUFSIZ).decode("utf8")
-#     del clients[conn]
-#     broadcast2(bytes("%s has left the chat." % name, "utf8"))
-#     conn.close()
-
-
-def requestfile(conn, msg):
+def request_file(conn, msg):
     if msg == '!request'.encode():
         message = "To continue the download, enter the file name with # , eg #dog"
         conn.send(message.encode())
         time.sleep(1)
 
 
-def broadcast2(msg, prefix=""):
-    for sock in clients:
-        sock.send(bytes(prefix, "utf8") + msg)
-
-
-def getusers(conn, msg, prefix=""):
+def get_users(conn, msg, prefix=""):
     if msg == '#getusers'.encode():
         # for name in clients.values():
         #     sock = get_key(name)
@@ -154,11 +110,9 @@ def broadcast(msg, prefix=""):  # prefix is for name identification.
     if msg.startswith('@'.encode()):
         for name in clients.values():
             sock = get_key(name)
-            print(msg[1:5], name)
-            if msg[1:len(name) + 1].decode() == name:
-                actual_message = msg[len(name) + 1:]
-                print("actual: ", actual_message)
-                print("type actual message is :", type(actual_message))
+            name_len = len(name)
+            if msg[1:name_len+1].decode() == name:
+                actual_message = msg[name_len+1:]
                 sock.send(bytes(prefix, "utf8") + actual_message)
     else:
         for sock in clients:
