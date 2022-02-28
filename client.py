@@ -50,21 +50,41 @@ def get_users_button(event=None):
 
 
 def download_file(save_as, file_type, file_size):
-    udp_socket = socket(AF_INET, SOCK_DGRAM)
-    udp_socket.bind(('127.0.0.1', 55003))
+    udp_socket_receive = socket(AF_INET, SOCK_DGRAM)
+    udp_socket_receive.bind(('127.0.0.1', 55003))
     name = save_as + '.' + file_type
     file = open(name, 'wb')
-    rec = 0
+    all_data = {}
+    packets_num = int(int(file_size)/(BUFSIZ*2))
+    print(packets_num)
     while True:
-        bytes_read = udp_socket.recv(2048)
-        file.write(bytes_read)
-        rec = rec + len(bytes_read)
-        print(f'rec: {rec} / {int(file_size)} bytes')
-        if not bytes_read:
+        packet_counter = len(all_data)
+        if packet_counter == packets_num:
+            sock.send('done'.encode())
+            print('done???')
             break
-
+        else:
+            missing_packets = ''
+            for i in range(0, packets_num):
+                if not all_data.keys().__contains__(i):
+                    if missing_packets == '':
+                        missing_packets = str(i)
+                    else:
+                        missing_packets = missing_packets + "," + str(i)
+            sock.send(missing_packets.encode())
+            length = len(missing_packets.split(','))
+            for i in range(0, length):
+                bytes_read = udp_socket_receive.recv(3000)
+                if not bytes_read:
+                    break
+                bytes_to_write = bytes_read[:BUFSIZ*2]
+                seq = bytes_read[BUFSIZ*2:]
+                seq_num = int(seq)
+                all_data[seq_num] = bytes_to_write
+    for data in all_data.values():
+        file.write(data)
     file.close()
-    udp_socket.close()
+    udp_socket_receive.close()
     return
 
 

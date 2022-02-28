@@ -3,6 +3,7 @@ import time
 from socket import AF_INET, socket, SOCK_STREAM, SOCK_DGRAM
 from threading import Thread
 
+
 clients = {}
 addresses = {}
 files = ["Holla", "aaa", "dog"]
@@ -60,17 +61,29 @@ def send_file(conn, msg):
         path = os.path.abspath(file_name_and_type)
         file_size = os.path.getsize(file_name_and_type)
         conn.send(f'##download{"#"}{save_as}{"#"}{file_type}{"#"}{file_size}'.encode())
-        sent = 0
         file = open(path, 'rb')
+        seq = 0
+        all_data = {}
+        addr = conn.getsockname()[0]
         while True:
-            bytes_read = file.read(2048)
-            udp_socket.sendto(bytes_read, ('127.0.0.1', 55003))
-            time.sleep(1)
-            sent = sent + len(bytes_read)
-            conn.send(f'sent: {sent} / {file_size}'.encode())
-            print(f'sent: {sent} / {file_size} bytes to {conn}')
+            bytes_read = file.read(2*BUFSIZ)
             if not bytes_read:
                 break
+            seq_num = str(seq).encode()
+            bytes_to_send = bytes_read + seq_num
+            all_data[seq] = bytes_to_send
+            seq += 1
+        print(seq)
+        while True:
+            flag = conn.recv(BUFSIZ).decode("utf-8")
+            if flag == 'done':
+                print('done??')
+                break
+            else:
+                packets_to_send = flag.split(',')
+                for packet_num in packets_to_send:
+                    udp_socket.sendto(all_data[int(packet_num)], (addr, 55003))
+                    print('sent ', packet_num)
         file.close()
 
 
