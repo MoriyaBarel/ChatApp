@@ -2,11 +2,13 @@ import os
 import time
 from socket import AF_INET, socket, SOCK_STREAM, SOCK_DGRAM
 from threading import Thread
-
+from os import listdir
+from os.path import isfile, join
 
 clients = {}
 addresses = {}
-files = ["Holla", "aaa", "dog"]
+
+files = ["random", "dog", "OSI"]
 
 HOST = "127.0.0.1"
 PORT = 5000
@@ -44,6 +46,8 @@ def handle_client(conn, addr):  # Takes client socket as argument.
             Thread(target=send_file(conn, msg))
         elif msg == bytes("#getusers", "utf8"):
             get_users(conn, msg, "connected users: ")
+        elif msg==bytes("#getfilelist", "utf8"):
+            get_file_list(conn,msg," file list->")
         elif msg != bytes("#quit", "utf8"):
             broadcast(msg, name + ": ")
         else:
@@ -66,7 +70,7 @@ def send_file(conn, msg):
         all_data = {}
         addr = conn.getsockname()[0]
         while True:
-            bytes_read = file.read(2*BUFSIZ)
+            bytes_read = file.read(2 * BUFSIZ)
             if not bytes_read:
                 break
             seq_num = str(seq).encode()
@@ -100,7 +104,7 @@ def get_filename_and_filetype(msg: bytes):
 
 def request_file(conn, msg):
     if msg == '!request'.encode():
-        message = "To continue the download, enter the file name with # , eg #dog"
+        message = "To continue the download, enter the file name with # , eg ##dog.jpg#save_as"
         conn.send(message.encode())
         time.sleep(1)
 
@@ -118,14 +122,20 @@ def get_users(conn, msg, prefix=""):
         #         sock.send(bytes(prefix, "utf8") + activity.encode())
 
 
+def get_file_list(conn, msg, prefix=""):
+    if msg == '#getfilelist'.encode():
+        file_list_str = str(files)
+        conn.send(bytes(prefix, "utf8") + file_list_str.encode())
+
+
 def broadcast(msg, prefix=""):  # prefix is for name identification.
     """Broadcasts a message to all the clients."""
     if msg.startswith('@'.encode()):
         for name in clients.values():
             sock = get_key(name)
             name_len = len(name)
-            if msg[1:name_len+1].decode() == name:
-                actual_message = msg[name_len+1:]
+            if msg[1:name_len + 1].decode() == name:
+                actual_message = msg[name_len + 1:]
                 sock.send(bytes(prefix, "utf8") + actual_message)
     else:
         for sock in clients:

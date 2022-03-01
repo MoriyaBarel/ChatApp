@@ -48,6 +48,10 @@ def get_users_button(event=None):
     my_msg.set("#getusers")
     send()
 
+def get_file_list(event=None):
+    my_msg.set("#getfilelist")
+    send()
+
 
 def download_file(save_as, file_type, file_size):
     udp_socket_receive = socket(AF_INET, SOCK_DGRAM)
@@ -114,6 +118,8 @@ users_button = tkinter.Button(top, text="online users", command=get_users_button
 users_button.pack()
 request_button = tkinter.Button(top, text="request", command=request)
 request_button.pack()
+file_list_button = tkinter.Button(top, text="File list", command=get_file_list)
+file_list_button.pack()
 
 quit_button = tkinter.Button(top, text="Quit", command=on_closing)
 quit_button.pack()
