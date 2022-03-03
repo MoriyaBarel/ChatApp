@@ -7,9 +7,9 @@ from os.path import isfile, join
 
 clients = {}
 addresses = {}
-
+global flag
+flag = False
 files = ["random", "dog", "OSI"]
-
 HOST = "127.0.0.1"
 PORT = 5000
 BUFSIZ = 1024
@@ -24,8 +24,9 @@ def accept_incoming_connections():
     while True:
         client, client_address = SOCK.accept()
         print("%s:%s has connected." % client_address)
-        client.send("Greetings from the ChatRoom! ".encode("utf8"))
-        client.send("Now type your name and press enter!".encode("utf8"))
+        client.send("Greetings from the ChatRoom!\nNow type your name and press enter !".encode("utf8"))
+ 
+
         addresses[client] = client_address
         Thread(target=handle_client, args=(client, client_address)).start()
 
@@ -33,6 +34,9 @@ def accept_incoming_connections():
 def handle_client(conn, addr):  # Takes client socket as argument.
     """Handles a single client connection."""
     name = conn.recv(BUFSIZ).decode("utf8")
+    for nick in clients.values():
+        if nick == name:
+            name = name + str(1)
     welcome = 'Welcome %s! If you ever want to quit, type #quit to exit.' % name
     conn.send(bytes(welcome, "utf8"))
     msg = "%s from [%s] has joined the chat!" % (name, "{}:{}".format(addr[0], addr[1]))
@@ -46,10 +50,12 @@ def handle_client(conn, addr):  # Takes client socket as argument.
             Thread(target=send_file(conn, msg))
         elif msg == bytes("#getusers", "utf8"):
             get_users(conn, msg, "connected users: ")
-        elif msg==bytes("#getfilelist", "utf8"):
-            get_file_list(conn,msg," file list->")
+        elif msg == bytes("#getfilelist", "utf8"):
+            get_file_list(conn, msg, " file list->")
+        elif msg.startswith('@'.encode()):
+            c2c(conn, msg, name + ":")
         elif msg != bytes("#quit", "utf8"):
-            broadcast(msg, name + ": ")
+            broadcast(msg, name + ":")
         else:
             del clients[conn]
             broadcast(bytes("%s has left the chat." % name, "utf8"))
@@ -58,37 +64,41 @@ def handle_client(conn, addr):  # Takes client socket as argument.
 
 
 def send_file(conn, msg):
-    file_name_and_type, file_name, file_type, save_as = get_filename_and_filetype(msg)
-    if not files.__contains__(file_name):
-        conn.send('error: no file was requested'.encode())
+    global flag
+    if flag:
+        file_name_and_type, file_name, file_type, save_as = get_filename_and_filetype(msg)
+        if not files.__contains__(file_name):
+            conn.send('error: no file was requested'.encode())
+        else:
+            path = os.path.abspath(file_name_and_type)
+            file_size = os.path.getsize(file_name_and_type)
+            conn.send(f'##download{"#"}{save_as}{"#"}{file_type}{"#"}{file_size}'.encode())
+            file = open(path, 'rb')
+            seq = 0
+            all_data = {}
+            addr = conn.getsockname()[0]
+            while True:
+                bytes_read = file.read(2 * BUFSIZ)
+                if not bytes_read:
+                    break
+                seq_num = str(seq).encode()
+                bytes_to_send = bytes_read + seq_num
+                all_data[seq] = bytes_to_send
+                seq += 1
+            print(seq)
+            while True:
+                flag = conn.recv(BUFSIZ).decode("utf-8")
+                if flag == 'done':
+                    print('done??')
+                    break
+                else:
+                    packets_to_send = flag.split(',')
+                    for packet_num in packets_to_send:
+                        udp_socket.sendto(all_data[int(packet_num)], (addr, 55003))
+                        print('sent ', packet_num)
+            file.close()
     else:
-        path = os.path.abspath(file_name_and_type)
-        file_size = os.path.getsize(file_name_and_type)
-        conn.send(f'##download{"#"}{save_as}{"#"}{file_type}{"#"}{file_size}'.encode())
-        file = open(path, 'rb')
-        seq = 0
-        all_data = {}
-        addr = conn.getsockname()[0]
-        while True:
-            bytes_read = file.read(2 * BUFSIZ)
-            if not bytes_read:
-                break
-            seq_num = str(seq).encode()
-            bytes_to_send = bytes_read + seq_num
-            all_data[seq] = bytes_to_send
-            seq += 1
-        print(seq)
-        while True:
-            flag = conn.recv(BUFSIZ).decode("utf-8")
-            if flag == 'done':
-                print('done??')
-                break
-            else:
-                packets_to_send = flag.split(',')
-                for packet_num in packets_to_send:
-                    udp_socket.sendto(all_data[int(packet_num)], (addr, 55003))
-                    print('sent ', packet_num)
-        file.close()
+        conn.send(bytes("request before download", "utf8"))
 
 
 def get_filename_and_filetype(msg: bytes):
@@ -103,23 +113,20 @@ def get_filename_and_filetype(msg: bytes):
 
 
 def request_file(conn, msg):
+    global flag
+    flag = True
     if msg == '!request'.encode():
         message = "To continue the download, enter the file name with # , eg ##dog.jpg#save_as"
         conn.send(message.encode())
+        flag = True
         time.sleep(1)
 
 
 def get_users(conn, msg, prefix=""):
     if msg == '#getusers'.encode():
-        # for name in clients.values():
-        #     sock = get_key(name)
         connected = str(clients.values())
         connected_users = connected[11:]
         conn.send(bytes(prefix, "utf8") + connected_users.encode())
-        # for activity in clients.values():
-        #     if activity != name:
-        #         print("type activity is : ")
-        #         sock.send(bytes(prefix, "utf8") + activity.encode())
 
 
 def get_file_list(conn, msg, prefix=""):
@@ -128,18 +135,24 @@ def get_file_list(conn, msg, prefix=""):
         conn.send(bytes(prefix, "utf8") + file_list_str.encode())
 
 
-def broadcast(msg, prefix=""):  # prefix is for name identification.
-    """Broadcasts a message to all the clients."""
-    if msg.startswith('@'.encode()):
-        for name in clients.values():
-            sock = get_key(name)
-            name_len = len(name)
-            if msg[1:name_len + 1].decode() == name:
-                actual_message = msg[name_len + 1:]
-                sock.send(bytes(prefix, "utf8") + actual_message)
-    else:
-        for sock in clients:
-            sock.send(bytes(prefix, "utf8") + msg)
+def c2c(conn, msg, prefix=""):
+    for name in clients.values():
+        sock = get_key(name)
+        name_len = len(name)
+        if msg[1:name_len + 1].decode() == name:
+            actual_message = msg[name_len + 1:]
+            sock.send(bytes(prefix, "utf8") + actual_message)
+            conn.send(bytes(prefix, "utf8") + actual_message)
+            break
+        else:
+            conn.send(bytes(f"user{msg[1:name_len + 1]} is not connected", "utf8"))
+            print(sock)
+            break
+
+
+def broadcast(msg, prefix=""):
+    for sock in clients:
+        sock.send(bytes(prefix, "utf8") + msg)
 
 
 def get_key(val):
@@ -149,7 +162,7 @@ def get_key(val):
 
 
 if __name__ == "__main__":
-    SOCK.listen(5)  # Listens for 5 connections at max.
+    SOCK.listen(5)
     print("Chat Server has Started !!")
     print("Waiting for connections...")
     ACCEPT_THREAD = Thread(target=accept_incoming_connections)
