@@ -1,26 +1,23 @@
 import os
-import threading
 import time
-from socket import AF_INET, socket, SOCK_STREAM, SOCK_DGRAM
+from _socket import *
+from socket import *
 from threading import Thread
-import socket
+
 
 clients = {}
 addresses = {}
 global flag
 flag = False
 files = ["random", "dog", "text"]
-HOST = input()
+HOST = "127.0.1.1"
 PORT = 5001
 BUFSIZ = 1024
 ADDR = (HOST, PORT)
-SOCK = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+SOCK = socket(AF_INET, SOCK_STREAM)
 SOCK.bind(('', PORT))
-SOCK.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-
-udp_socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-print(f'Server IP - {socket.gethostbyname(socket.gethostname())}')
-
+SOCK.setsockopt(SOL_SOCKET, SO_REUSEADDR, 1)
+udp_socket = socket(AF_INET, SOCK_DGRAM)
 
 
 def accept_incoming_connections():
@@ -81,7 +78,7 @@ def send_file(conn, msg):
             all_data = {}
             addr = conn.getsockname()[0]
             while True:
-                bytes_read = file.read(2*BUFSIZ)
+                bytes_read = file.read(2 * BUFSIZ)
                 if not bytes_read:
                     break
                 if seq <= 9:
@@ -91,13 +88,12 @@ def send_file(conn, msg):
                 bytes_to_send = bytes_read + seq_num
                 all_data[seq] = bytes_to_send
                 seq += 1
-            print(all_data.keys())
-
+            print(seq)
             while True:
-                acknowledge = conn.recv(BUFSIZ).decode()
-                print("flag : ", acknowledge)
-                if acknowledge == 'done':
+                acknowledge = conn.recv(BUFSIZ).decode("utf-8")
+                if acknowledge.__contains__('done'):
                     print('done??')
+                    udp_socket.close()
                     break
                 else:
                     packets_to_send = acknowledge.split(',')
@@ -145,18 +141,18 @@ def get_file_list(conn, msg, prefix=""):
 
 
 def c2c(conn, msg, prefix=""):
+    check = False
     for name in clients.values():
         sock = get_key(name)
         name_len = len(name)
         if msg[1:name_len + 1].decode() == name:
+            check = True
             actual_message = msg[name_len + 1:]
             sock.send(bytes(prefix, "utf8") + actual_message)
             conn.send(bytes(prefix, "utf8") + actual_message)
             break
-        else:
-            conn.send(bytes(f"user{msg[1:name_len + 1]} is not connected", "utf8"))
-            print(sock)
-            break
+    if not check:
+        conn.send(f"user not found".encode())
 
 
 def broadcast(msg, prefix=""):
