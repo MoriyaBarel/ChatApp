@@ -1,21 +1,26 @@
 import os
+import threading
 import time
 from socket import AF_INET, socket, SOCK_STREAM, SOCK_DGRAM
 from threading import Thread
-
+import socket
 
 clients = {}
 addresses = {}
 global flag
 flag = False
 files = ["random", "dog", "text"]
-HOST = "127.0.0.1"
-PORT = 5000
+HOST = input()
+PORT = 5001
 BUFSIZ = 1024
 ADDR = (HOST, PORT)
-SOCK = socket(AF_INET, SOCK_STREAM)
-SOCK.bind(ADDR)
-udp_socket = socket(AF_INET, SOCK_DGRAM)
+SOCK = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+SOCK.bind(('', PORT))
+SOCK.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+
+udp_socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+print(f'Server IP - {socket.gethostbyname(socket.gethostname())}')
+
 
 
 def accept_incoming_connections():
@@ -43,9 +48,9 @@ def handle_client(conn, addr):  # Takes client socket as argument.
     while True:
         msg = conn.recv(BUFSIZ)
         if msg == bytes("!request", "utf8"):
-            Thread(target=request_file(conn, msg))
+            request_file(conn, msg)
         elif msg.startswith("##".encode()):
-            Thread(target=send_file(conn, msg))
+            send_file(conn, msg)
         elif msg == bytes("#getusers", "utf8"):
             get_users(conn, msg, "connected users: ")
         elif msg == bytes("#getfilelist", "utf8"):
@@ -76,7 +81,7 @@ def send_file(conn, msg):
             all_data = {}
             addr = conn.getsockname()[0]
             while True:
-                bytes_read = file.read(2 * BUFSIZ)
+                bytes_read = file.read(2*BUFSIZ)
                 if not bytes_read:
                     break
                 if seq <= 9:
@@ -86,17 +91,20 @@ def send_file(conn, msg):
                 bytes_to_send = bytes_read + seq_num
                 all_data[seq] = bytes_to_send
                 seq += 1
-            print(seq)
+            print(all_data.keys())
+
             while True:
-                flag = conn.recv(BUFSIZ).decode("utf-8")
-                if flag == 'done':
+                acknowledge = conn.recv(BUFSIZ).decode()
+                print("flag : ", acknowledge)
+                if acknowledge == 'done':
                     print('done??')
                     break
                 else:
-                    packets_to_send = flag.split(',')
+                    packets_to_send = acknowledge.split(',')
                     for packet_num in packets_to_send:
-                        udp_socket.sendto(all_data[int(packet_num)], (addr, 55003))
-                        print('sent ', packet_num)
+                        if packet_num != '':
+                            udp_socket.sendto(all_data[int(packet_num)], (addr, 55003))
+                            print('sent ', packet_num)
             file.close()
     else:
         conn.send(bytes("request before download", "utf8"))

@@ -17,8 +17,7 @@ def receive():
             elif msg.startswith('##download'):
                 details = msg[11:]
                 save_as, file_type, file_size = details.split('#')
-                t3 = threading.Thread(target=download_file(save_as, file_type, file_size))
-                t3.start()
+                download_file(save_as, file_type, file_size)
         except OSError:  # Possibly client has left the chat.
             break
 
@@ -53,43 +52,45 @@ def get_file_list(event=None):
     my_msg.set("#getfilelist")
     send()
 
+def checksum(packets: {}) -> []:
+    missing_packets = []
+    st = ''
+    for key in packets.keys():
+        if packets[key] is False or None:
+            missing_packets.append(key)
+            st = st + str(key) + ','
+    return missing_packets, st
+
 
 def download_file(save_as, file_type, file_size):
     udp_socket_receive = socket(AF_INET, SOCK_DGRAM)
-    udp_socket_receive.bind(('127.0.0.1', 55003))
+    udp_socket_receive.bind(('127.0.1.1',55003))
     name = save_as + '.' + file_type
     file = open(name, 'wb')
     all_data = {}
-    packets_num = int(int(file_size)/(BUFSIZ*2))
+    packets_num = int(int(file_size)/(BUFSIZ*2))+1
+    for i in range(packets_num):
+        if i <= 9:
+            packet_num = '0' + str(i)
+        else:
+            packet_num = str(i)
+        all_data[packet_num] = False
     print(packets_num)
     while True:
-        packet_counter = len(all_data)
-        if packet_counter == packets_num:
+        missing_packets, missing_packets_str = checksum(all_data)
+        print('len', len(missing_packets))
+        print('missing packets', missing_packets_str)
+        if len(missing_packets) == 0:
             sock.send('done'.encode())
             print('done???')
             break
-        else:
-            missing_packets = ''
-            for i in range(0, packets_num):
-                if not all_data.keys().__contains__(i):
-                    if i <= 9:
-                        packet_num = '0' + str(i)
-                    else:
-                        packet_num = str(i)
-                    if missing_packets == '':
-                        missing_packets = packet_num
-                    else:
-                        missing_packets = missing_packets + "," + packet_num
-            sock.send(missing_packets.encode())
-            length = len(missing_packets.split(','))
-            for i in range(0, length):
-                bytes_read = udp_socket_receive.recv(2050)
-                if not bytes_read:
-                    break
-                bytes_to_write = bytes_read[:len(bytes_read)-2]
-                seq = bytes_read[len(bytes_read)-2:]
-                seq_num = int(seq)
-                all_data[seq_num] = bytes_to_write
+        sock.send(missing_packets_str.encode())
+        print("@@@@@@@@@@@@@@@@@@@@@")
+        bytes_read = udp_socket_receive.recv(2050)
+        bytes_to_write = bytes_read[:len(bytes_read)-2]
+        seq = bytes_read[len(bytes_read)-2:].decode()
+        all_data[seq] = bytes_to_write
+        print(f"received {len(all_data[seq])} from {seq} ")
     for data in all_data.values():
         file.write(data)
     file.close()
@@ -132,8 +133,8 @@ quit_button.pack()
 top.protocol("WM_DELETE_WINDOW", on_closing)
 
 
-HOST = "127.0.0.1"
-PORT = 5000
+HOST = input()
+PORT = 5001
 BUFSIZ = 1024
 ADDR = (HOST, PORT)
 sock = socket(AF_INET, SOCK_STREAM)
