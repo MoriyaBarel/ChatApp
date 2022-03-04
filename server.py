@@ -10,10 +10,8 @@ addresses = {}
 global flag
 flag = False
 files = ["random", "dog", "text"]
-HOST = "127.0.1.1"
 PORT = 5001
 BUFSIZ = 1024
-ADDR = (HOST, PORT)
 SOCK = socket(AF_INET, SOCK_STREAM)
 SOCK.bind(('', PORT))
 SOCK.setsockopt(SOL_SOCKET, SO_REUSEADDR, 1)

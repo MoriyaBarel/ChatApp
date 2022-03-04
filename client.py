@@ -1,3 +1,4 @@
+import sys
 import threading
 import tkinter
 from socket import AF_INET, socket, SOCK_STREAM, SOCK_DGRAM
@@ -126,7 +127,7 @@ quit_button.pack()
 top.protocol("WM_DELETE_WINDOW", on_closing)
 
 
-HOST = "127.0.1.1"
+HOST = sys.argv[1]
 PORT = 5001
 BUFSIZ = 1024
 ADDR = (HOST, PORT)
