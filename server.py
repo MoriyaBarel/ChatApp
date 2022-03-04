@@ -2,14 +2,13 @@ import os
 import time
 from socket import AF_INET, socket, SOCK_STREAM, SOCK_DGRAM
 from threading import Thread
-from os import listdir
-from os.path import isfile, join
+
 
 clients = {}
 addresses = {}
 global flag
 flag = False
-files = ["random", "dog", "OSI"]
+files = ["random", "dog", "text"]
 HOST = "127.0.0.1"
 PORT = 5000
 BUFSIZ = 1024
@@ -25,7 +24,6 @@ def accept_incoming_connections():
         client, client_address = SOCK.accept()
         print("%s:%s has connected." % client_address)
         client.send("Greetings from the ChatRoom!\nNow type your name and press enter !".encode("utf8"))
- 
 
         addresses[client] = client_address
         Thread(target=handle_client, args=(client, client_address)).start()
@@ -81,7 +79,10 @@ def send_file(conn, msg):
                 bytes_read = file.read(2 * BUFSIZ)
                 if not bytes_read:
                     break
-                seq_num = str(seq).encode()
+                if seq <= 9:
+                    seq_num = ('0' + str(seq)).encode()
+                else:
+                    seq_num = str(seq).encode()
                 bytes_to_send = bytes_read + seq_num
                 all_data[seq] = bytes_to_send
                 seq += 1
