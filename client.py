@@ -48,6 +48,7 @@ def get_users_button(event=None):
     my_msg.set("#getusers")
     send()
 
+
 def get_file_list(event=None):
     my_msg.set("#getfilelist")
     send()
@@ -71,18 +72,22 @@ def download_file(save_as, file_type, file_size):
             missing_packets = ''
             for i in range(0, packets_num):
                 if not all_data.keys().__contains__(i):
-                    if missing_packets == '':
-                        missing_packets = str(i)
+                    if i <= 9:
+                        packet_num = '0' + str(i)
                     else:
-                        missing_packets = missing_packets + "," + str(i)
+                        packet_num = str(i)
+                    if missing_packets == '':
+                        missing_packets = packet_num
+                    else:
+                        missing_packets = missing_packets + "," + packet_num
             sock.send(missing_packets.encode())
             length = len(missing_packets.split(','))
             for i in range(0, length):
-                bytes_read = udp_socket_receive.recv(3000)
+                bytes_read = udp_socket_receive.recv(2050)
                 if not bytes_read:
                     break
-                bytes_to_write = bytes_read[:BUFSIZ*2]
-                seq = bytes_read[BUFSIZ*2:]
+                bytes_to_write = bytes_read[:len(bytes_read)-2]
+                seq = bytes_read[len(bytes_read)-2:]
                 seq_num = int(seq)
                 all_data[seq_num] = bytes_to_write
     for data in all_data.values():
