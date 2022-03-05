@@ -78,10 +78,7 @@ def download_file(save_as, file_type, file_size, port):
                         packet_num = '0' + str(i)
                     else:
                         packet_num = str(i)
-                    if missing_packets == '':
-                        missing_packets = packet_num
-                    else:
-                        missing_packets = missing_packets + ',' + packet_num
+                    missing_packets = missing_packets + packet_num + ','
             sock.send(missing_packets.encode())
             bytes_read = udp_socket_receive.recv(2050)
             if not bytes_read:

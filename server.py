@@ -7,8 +7,6 @@ all_ports = {55001: True, 55002: True, 55003: True, 55004: True, 55005: True, 55
              55009: True, 55010: True, 55011: True, 55012: True, 55013: True, 55014: True, 55015: True}
 clients = {}
 addresses = {}
-global flag
-flag = False
 files = ["random", "messi", "text"]
 PORT = 55000
 BUFSIZ = 1024
@@ -16,6 +14,9 @@ SOCK = socket(AF_INET, SOCK_STREAM)
 SOCK.bind(('', PORT))
 SOCK.setsockopt(SOL_SOCKET, SO_REUSEADDR, 1)
 udp_socket = socket(AF_INET, SOCK_DGRAM)
+check = {}
+for i in range(len(clients.values())):
+    check[i] = False
 
 
 def accept_connections():
@@ -61,8 +62,7 @@ def handle_client(conn, addr):  # Takes client socket as argument.
 
 
 def send_file(conn, msg, client_address):
-    global flag
-    if flag:
+    if check[clients[conn]]:
         file_name_and_type, file_name, file_type, save_as = get_filename_and_filetype(msg)
         if not files.__contains__(file_name):
             conn.send('error: file not found'.encode())
@@ -90,12 +90,11 @@ def send_file(conn, msg, client_address):
                 if acknowledge.__contains__('done'):
                     conn.send('File download completed successfully'.encode())
                     all_ports[port_to_send] = True
-                    flag = False
+                    check[clients[conn]] = False
                     print('done')
                     break
                 else:
                     packets_to_send = split_packets(acknowledge.split(','))
-                    print(packets_to_send)
                     for packet_num in packets_to_send:
                         if packet_num != '':
                             udp_socket.sendto(all_data[int(packet_num)], (client_address, port_to_send))
@@ -109,8 +108,8 @@ def split_packets(packets: list) -> set:
     for packet in packets:
         if len(packet) > 2:
             i = 0
-            while i < int((len(packet))/2)+1:
-                ans.append(packet[i:i+2])
+            while i < int((len(packet)) / 2) + 1:
+                ans.append(packet[i:i + 2])
                 i += 2
         else:
             ans.append(packet)
@@ -129,13 +128,13 @@ def get_filename_and_filetype(msg: bytes):
 
 
 def request_file(conn, msg):
-    global flag
-    flag = True
+    # global flag
+    # flag = True
     if msg == '!request'.encode():
         message = "To continue the download, enter the file name with ##file_name.file_type#save_as\n"
         conn.send(message.encode())
-        flag = True
         time.sleep(1)
+        check[clients[conn]] = True
 
 
 def get_users(conn, msg, prefix=""):
