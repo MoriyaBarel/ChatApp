@@ -94,9 +94,13 @@ def send_file(conn, msg, client_address):
                     print('done')
                     break
                 else:
-                    packets_to_send = split_packets(acknowledge.split(','))
+                    ppp = acknowledge.split(',')
+                    print(ppp)
+                    packets_to_send = split_packets(ppp)
+                    print(packets_to_send)
                     for packet_num in packets_to_send:
-                        udp_socket.sendto(all_data[int(packet_num)], (client_address, port_to_send))
+                        if packet_num != '':
+                            udp_socket.sendto(all_data[int(packet_num)], (client_address, port_to_send))
             file.close()
     else:
         conn.send(bytes("request before download", "utf8"))
