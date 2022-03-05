@@ -9,7 +9,7 @@ clients = {}
 addresses = {}
 global flag
 flag = False
-files = ["random", "dog", "text"]
+files = ["random", "messi", "text"]
 PORT = 55000
 BUFSIZ = 1024
 SOCK = socket(AF_INET, SOCK_STREAM)
