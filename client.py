@@ -1,6 +1,7 @@
 import sys
 import threading
 import tkinter
+import tkinter.messagebox
 from socket import AF_INET, socket, SOCK_STREAM, SOCK_DGRAM
 from threading import Thread
 from tkinter import scrolledtext
@@ -17,8 +18,8 @@ def receive():
                 top.quit()
             elif msg.startswith('##download'):
                 details = msg[11:]
-                save_as, file_type, file_size = details.split('#')
-                t3 = threading.Thread(target=download_file(save_as, file_type, file_size))
+                save_as, file_type, file_size, port = details.split('#')
+                t3 = threading.Thread(target=download_file(save_as, file_type, file_size, port))
                 t3.start()
         except OSError:  # Possibly client has left the chat.
             break
@@ -39,7 +40,7 @@ def request(event=None):
     send()
 
 
-def on_closing(event=None):
+def closing(event=None):
     """ This function is to be called when the window is closed. """
     my_msg.set("#quit")
     send()
@@ -55,9 +56,10 @@ def get_file_list(event=None):
     send()
 
 
-def download_file(save_as, file_type, file_size):
+def download_file(save_as, file_type, file_size, port):
     udp_socket_receive = socket(AF_INET, SOCK_DGRAM)
-    udp_socket_receive.bind(('127.0.1.1', 55003))
+    address = sock.getsockname()[0]
+    udp_socket_receive.bind((address, int(port)))
     name = save_as + '.' + file_type
     file = open(name, 'wb')
     all_data = {}
@@ -67,7 +69,7 @@ def download_file(save_as, file_type, file_size):
         packet_counter = len(all_data)
         if packet_counter == packets_num:
             sock.send('done'.encode())
-            print('done???')
+            print('download finished')
             break
         else:
             missing_packets = ''
@@ -99,13 +101,23 @@ messages_frame = tkinter.Frame(top)
 my_msg = tkinter.StringVar()  # For the messages to be sent.
 my_msg.set("")
 scrollbar = tkinter.Scrollbar(messages_frame)  # To navigate through past messages.
-msg_list = tkinter.Listbox(messages_frame, height=15, width=70, yscrollcommand=scrollbar.set)
+msg_list = tkinter.Listbox(messages_frame, height=15, width=75, yscrollcommand=scrollbar.set)
 scrollbar.pack(side=tkinter.RIGHT, fill=tkinter.Y)
 msg_list.pack(side=tkinter.LEFT, fill=tkinter.BOTH)
 msg_list.pack()
 st = scrolledtext.ScrolledText(top)
 
 messages_frame.pack()
+
+lines = ["• To send a private message type @user_name and the message contents.",
+         "• To broadcast to everyone, just type the message.",
+         "• The download process begins with requesting permission",
+         "   by pressing the request button, than follow the instructions."]
+msg_list.insert(tkinter.END, 'User guide:')
+msg_list.insert(tkinter.END, lines[0])
+msg_list.insert(tkinter.END, lines[1])
+msg_list.insert(tkinter.END, lines[2])
+msg_list.insert(tkinter.END, lines[3])
 
 button_label = tkinter.Label(top, text="Enter Message:")
 button_label.pack()
@@ -114,21 +126,21 @@ entry_field.bind("<Return>", send)
 entry_field.pack()
 send_button = tkinter.Button(top, text="Send", command=send)
 send_button.pack()
-users_button = tkinter.Button(top, text="online users", command=get_users_button)
+users_button = tkinter.Button(top, text="Online users", command=get_users_button)
 users_button.pack()
-request_button = tkinter.Button(top, text="request", command=request)
+request_button = tkinter.Button(top, text="Request download", command=request)
 request_button.pack()
 file_list_button = tkinter.Button(top, text="File list", command=get_file_list)
 file_list_button.pack()
 
-quit_button = tkinter.Button(top, text="Quit", command=on_closing)
+quit_button = tkinter.Button(top, text="Quit", command=closing)
 quit_button.pack()
 
-top.protocol("WM_DELETE_WINDOW", on_closing)
+top.protocol("WM_DELETE_WINDOW", closing)
 
 
 HOST = sys.argv[1]
-PORT = 5001
+PORT = 55000
 BUFSIZ = 1024
 ADDR = (HOST, PORT)
 sock = socket(AF_INET, SOCK_STREAM)
@@ -136,4 +148,4 @@ sock.connect(ADDR)
 
 receive_thread = Thread(target=receive)
 receive_thread.start()
-tkinter.mainloop()  # Starts GUI execution.
+tkinter.mainloop()  # GUI Starts
