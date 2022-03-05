@@ -94,13 +94,25 @@ def send_file(conn, msg, client_address):
                     print('done')
                     break
                 else:
-                    packets_to_send = acknowledge.split(',')
+                    packets_to_send = split_packets(acknowledge.split(','))
                     for packet_num in packets_to_send:
-                        if packet_num != '':
-                            udp_socket.sendto(all_data[int(packet_num)], (client_address, port_to_send))
+                        udp_socket.sendto(all_data[int(packet_num)], (client_address, port_to_send))
             file.close()
     else:
         conn.send(bytes("request before download", "utf8"))
+
+
+def split_packets(packets: list) -> set:
+    ans = []
+    for packet in packets:
+        if len(packet) > 2:
+            i = 0
+            while i < int((len(packet))/2)+1:
+                ans.append(packet[i:i+2])
+                i += 2
+        else:
+            ans.append(packet)
+    return set(ans)
 
 
 def get_filename_and_filetype(msg: bytes):

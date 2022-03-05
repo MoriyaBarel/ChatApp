@@ -64,7 +64,6 @@ def download_file(save_as, file_type, file_size, port):
     file = open(name, 'wb')
     all_data = {}
     packets_num = int(int(file_size)/(BUFSIZ*2))+1
-    print(packets_num)
     while True:
         packet_counter = len(all_data)
         if packet_counter == packets_num:
@@ -79,7 +78,10 @@ def download_file(save_as, file_type, file_size, port):
                         packet_num = '0' + str(i)
                     else:
                         packet_num = str(i)
-                    missing_packets = missing_packets + packet_num + ","
+                    if missing_packets == '':
+                        missing_packets = packet_num
+                    else:
+                        missing_packets = missing_packets + ',' + packet_num
             sock.send(missing_packets.encode())
             bytes_read = udp_socket_receive.recv(2050)
             if not bytes_read:
