@@ -19,8 +19,8 @@ def receive():
             elif msg.startswith('##download'):
                 details = msg[11:]
                 save_as, file_type, file_size, port = details.split('#')
-                t3 = threading.Thread(target=download_file(save_as, file_type, file_size, port))
-                t3.start()
+                download_thread = threading.Thread(target=download_file(save_as, file_type, file_size, port))
+                download_thread.start()
         except OSError:  # Possibly client has left the chat.
             break
 
@@ -60,8 +60,6 @@ def download_file(save_as, file_type, file_size, port):
     udp_socket_receive = socket(AF_INET, SOCK_DGRAM)
     address = sock.getsockname()[0]
     udp_socket_receive.bind((address, int(port)))
-    name = save_as + '.' + file_type
-    file = open(name, 'wb')
     all_data = {}
     packets_num = int(int(file_size)/(BUFSIZ*2))+1
     while True:
@@ -71,28 +69,39 @@ def download_file(save_as, file_type, file_size, port):
             print('download finished')
             break
         else:
-            missing_packets = ''
-            for i in range(0, packets_num):
-                if not all_data.keys().__contains__(i):
-                    if i <= 9:
-                        packet_num = '0' + str(i)
-                    else:
-                        packet_num = str(i)
-                    missing_packets = missing_packets + packet_num + ','
-            sock.send(missing_packets.encode())
+            handle_missing_packets(all_data, packets_num)
             bytes_read = udp_socket_receive.recv(2050)
             if not bytes_read:
                 continue
             bytes_to_write = bytes_read[:len(bytes_read)-2]
             seq = bytes_read[len(bytes_read)-2:]
             all_data[seq] = bytes_to_write
-    for index in sorted(all_data.keys()):
-        file.write(all_data[index])
-    file.close()
+    write_to_file(all_data, save_as, file_type)
     udp_socket_receive.close()
     return
 
 
+def handle_missing_packets(all_data, packets_num):
+    missing_packets = ''
+    for i in range(0, packets_num):
+        if not all_data.keys().__contains__(i):
+            if i <= 9:
+                packet_num = '0' + str(i)
+            else:
+                packet_num = str(i)
+            missing_packets = missing_packets + packet_num + ','
+    sock.send(missing_packets.encode())
+
+
+def write_to_file(all_data, save_as, file_type):
+    name = save_as + '.' + file_type
+    file = open(name, 'wb')
+    for index in sorted(all_data.keys()):
+        file.write(all_data[index])
+    file.close()
+
+
+# ------------------------------Gui----------------------------------
 top = tkinter.Tk()
 top.title("ChatApp")
 messages_frame = tkinter.Frame(top)
@@ -137,14 +146,16 @@ quit_button.pack()
 
 top.protocol("WM_DELETE_WINDOW", closing)
 
+# -------------------------------------------------------------------
 
-HOST = sys.argv[1]
-PORT = 55000
-BUFSIZ = 1024
-ADDR = (HOST, PORT)
-sock = socket(AF_INET, SOCK_STREAM)
-sock.connect(ADDR)
+if __name__ == '__main__':
+    HOST = sys.argv[1]
+    PORT = 55000
+    BUFSIZ = 1024
+    ADDR = (HOST, PORT)
+    sock = socket(AF_INET, SOCK_STREAM)
+    sock.connect(ADDR)
 
-receive_thread = Thread(target=receive)
-receive_thread.start()
-tkinter.mainloop()  # GUI Starts
+    receive_thread = Thread(target=receive)
+    receive_thread.start()
+    tkinter.mainloop()  # GUI Starts

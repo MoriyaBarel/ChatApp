@@ -14,6 +14,7 @@ SOCK = socket(AF_INET, SOCK_STREAM)
 SOCK.bind(('', PORT))
 SOCK.setsockopt(SOL_SOCKET, SO_REUSEADDR, 1)
 udp_socket = socket(AF_INET, SOCK_DGRAM)
+# Check if a request has been sent
 check = {}
 for i in range(len(clients.values())):
     check[i] = False
@@ -71,36 +72,45 @@ def send_file(conn, msg, client_address):
             file_size = os.path.getsize(file_name_and_type)
             port_to_send = get_port(conn)
             conn.send(f'##download{"#"}{save_as}{"#"}{file_type}{"#"}{file_size}{"#"}{port_to_send}'.encode())
-            file = open(path, 'rb')
-            seq = 0
-            all_data = {}
-            while True:
-                bytes_read = file.read(2 * BUFSIZ)
-                if not bytes_read:
-                    break
-                if seq <= 9:
-                    seq_num = ('0' + str(seq)).encode()
-                else:
-                    seq_num = str(seq).encode()
-                bytes_to_send = bytes_read + seq_num
-                all_data[seq] = bytes_to_send
-                seq += 1
-            while True:
-                acknowledge = conn.recv(BUFSIZ).decode("utf-8")
-                if acknowledge.__contains__('done'):
-                    conn.send('File download completed successfully'.encode())
-                    all_ports[port_to_send] = True
-                    check[clients[conn]] = False
-                    print('done')
-                    break
-                else:
-                    packets_to_send = split_packets(acknowledge.split(','))
-                    for packet_num in packets_to_send:
-                        if packet_num != '':
-                            udp_socket.sendto(all_data[int(packet_num)], (client_address, port_to_send))
-            file.close()
+            all_data = prep_data_for_sending(path)
+            sending(conn, client_address, port_to_send, all_data)
     else:
         conn.send(bytes("request before download", "utf8"))
+
+
+def prep_data_for_sending(path):
+    file = open(path, 'rb')
+    seq = 0
+    all_data = {}
+    while True:
+        bytes_read = file.read(2 * BUFSIZ)
+        if not bytes_read:
+            break
+        if seq <= 9:
+            seq_num = ('0' + str(seq)).encode()
+        else:
+            seq_num = str(seq).encode()
+        bytes_to_send = bytes_read + seq_num
+        all_data[seq] = bytes_to_send
+        seq += 1
+    file.close()
+    return all_data
+
+
+def sending(conn, client_address, port_to_send, all_data):
+    while True:
+        acknowledge = conn.recv(BUFSIZ).decode("utf-8")
+        if acknowledge.__contains__('done'):
+            conn.send('File download completed successfully'.encode())
+            all_ports[port_to_send] = True
+            check[clients[conn]] = False
+            print('done')
+            break
+        else:
+            packets_to_send = split_packets(acknowledge.split(','))
+            for packet_num in packets_to_send:
+                if packet_num != '':
+                    udp_socket.sendto(all_data[int(packet_num)], (client_address, port_to_send))
 
 
 def split_packets(packets: list) -> set:
@@ -128,8 +138,6 @@ def get_filename_and_filetype(msg: bytes):
 
 
 def request_file(conn, msg):
-    # global flag
-    # flag = True
     if msg == '!request'.encode():
         message = "To continue the download, enter the file name with ##file_name.file_type#save_as\n"
         conn.send(message.encode())
