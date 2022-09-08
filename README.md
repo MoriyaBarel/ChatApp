@@ -1,5 +1,4 @@
 # Chat App Project
-#### Authors: Liel Biton & Moriya Barel
 
 ## Introduction
 
