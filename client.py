@@ -1,5 +1,7 @@
+import math
 import sys
 import threading
+import time
 import tkinter
 import tkinter.messagebox
 from socket import AF_INET, socket, SOCK_STREAM, SOCK_DGRAM
@@ -11,15 +13,22 @@ def receive():
     """ Handles receiving of messages. """
     while True:
         try:
-            msg = sock.recv(BUFSIZ).decode("utf8")
+            msg = sock.recv(BUF_SIZE).decode("utf8")
             msg_list.insert(tkinter.END, msg)
             if msg == "quit":
                 sock.close()
                 top.quit()
             elif msg.startswith('##download'):
-                details = msg[11:]
-                save_as, file_type, file_size, port = details.split('#')
-                download_thread = threading.Thread(target=download_file(save_as, file_type, file_size, port))
+                # Todo: decide between the following two options:
+                # option 1:
+                msg_data = msg.split("##download#")
+                details = msg_data[1]
+                # option 2:
+                # download_prefix = 11
+                # details = msg[download_prefix:]
+                save_as, file_type, file_size, recv_port, management_port = details.split('#')
+                all_data = {}
+                download_thread = threading.Thread(target=download_file(all_data, save_as, file_type, file_size, recv_port, management_port))
                 download_thread.start()
         except OSError:  # Possibly client has left the chat.
             break
@@ -56,41 +65,51 @@ def get_file_list(event=None):
     send()
 
 
-def download_file(save_as, file_type, file_size, port):
-    udp_socket_receive = socket(AF_INET, SOCK_DGRAM)
+def download_file(all_data, save_as, file_type, file_size, recv_port, management_port):
+    udp_sock_management = socket(AF_INET, SOCK_DGRAM)
+    udp_sock_receive = socket(AF_INET, SOCK_DGRAM)
     address = sock.getsockname()[0]
-    udp_socket_receive.bind((address, int(port)))
-    all_data = {}
-    packets_num = int(int(file_size)/(BUFSIZ*2))+1
+    udp_sock_receive.bind((address, int(recv_port)))
+    packets_num = math.ceil(float(file_size)/CHUNK_SIZE)
+    mgmt_thread = threading.Thread(target=mgmt_loop, args=(all_data, packets_num, udp_sock_management, management_port))
+    mgmt_thread.start()
     while True:
         packet_counter = len(all_data)
         if packet_counter == packets_num:
-            sock.send('done'.encode())
-            print('download finished')
             break
         else:
-            handle_missing_packets(all_data, packets_num)
-            bytes_read = udp_socket_receive.recv(2050)
+            bytes_read = udp_sock_receive.recv(BUF_SIZE)
             if not bytes_read:
                 continue
-            bytes_to_write = bytes_read[:len(bytes_read)-2]
-            seq = bytes_read[len(bytes_read)-2:]
-            all_data[seq] = bytes_to_write
+            bytes_to_write, seq = bytes_read.split('seq:'.encode())
+            all_data[int(seq.decode("utf-8"))] = bytes_to_write
+    mgmt_thread.join()
     write_to_file(all_data, save_as, file_type)
-    udp_socket_receive.close()
+    udp_sock_management.close()
+    udp_sock_receive.close()
     return
 
 
-def handle_missing_packets(all_data, packets_num):
+def mgmt_loop(all_data, packets_num, udp_sock_management, management_port):
+    while True:
+        packet_counter = len(all_data)
+        if packet_counter == packets_num:
+            udp_sock_management.sendto('done'.encode(), (HOST, int(management_port)))
+            print('download finished')
+            break
+        handle_missing_packets(all_data, packets_num, udp_sock_management, management_port)
+        time.sleep(0.2)
+
+
+def handle_missing_packets(all_data, packets_num, udp_sock_management, management_port):
     missing_packets = ''
     for i in range(0, packets_num):
-        if not all_data.keys().__contains__(i):
-            if i <= 9:
-                packet_num = '0' + str(i)
-            else:
-                packet_num = str(i)
+        if i not in all_data.keys():
+            packet_num = str(i)
             missing_packets = missing_packets + packet_num + ','
-    sock.send(missing_packets.encode())
+    missing_packets = missing_packets[:-1]
+    print('missing:', missing_packets)
+    udp_sock_management.sendto(missing_packets.encode(), (HOST, int(management_port)))
 
 
 def write_to_file(all_data, save_as, file_type):
@@ -151,7 +170,10 @@ top.protocol("WM_DELETE_WINDOW", closing)
 if __name__ == '__main__':
     HOST = sys.argv[1]
     PORT = 55000
-    BUFSIZ = 1024
+    BUF_SIZE = 2048
+    # BUF_SIZE is the total size of the packet
+    CHUNK_SIZE = 2000
+    # CHUNK SIZE is the data size, must be smaller than BUF_SIZE
     ADDR = (HOST, PORT)
     sock = socket(AF_INET, SOCK_STREAM)
     sock.connect(ADDR)

@@ -9,11 +9,11 @@ clients = {}
 addresses = {}
 files = ["random", "messi", "text"]
 PORT = 55000
-BUFSIZ = 1024
+BUF_SIZE = 2048
+CHUNK_SIZE = 2000
 SOCK = socket(AF_INET, SOCK_STREAM)
 SOCK.bind(('', PORT))
 SOCK.setsockopt(SOL_SOCKET, SO_REUSEADDR, 1)
-udp_socket = socket(AF_INET, SOCK_DGRAM)
 # Check if a request has been sent
 check = {}
 for i in range(len(clients.values())):
@@ -32,7 +32,7 @@ def accept_connections():
 
 def handle_client(conn, addr):  # Takes client socket as argument.
     """Handles a single client connection."""
-    name = conn.recv(BUFSIZ).decode("utf8")
+    name = conn.recv(BUF_SIZE).decode("utf8")
     for nick in clients.values():
         if nick == name:
             name = name + str(1)
@@ -42,7 +42,7 @@ def handle_client(conn, addr):  # Takes client socket as argument.
     broadcast(bytes(msg, "utf8"))
     clients[conn] = name
     while True:
-        msg = conn.recv(BUFSIZ)
+        msg = conn.recv(BUF_SIZE)
         if msg == bytes("!request", "utf8"):
             request_file(conn, msg)
         elif msg.startswith("##".encode()):
@@ -65,15 +65,16 @@ def handle_client(conn, addr):  # Takes client socket as argument.
 def send_file(conn, msg, client_address):
     if check[clients[conn]]:
         file_name_and_type, file_name, file_type, save_as = get_filename_and_filetype(msg)
-        if not files.__contains__(file_name):
+        if file_name not in files:
             conn.send('error: file not found'.encode())
         else:
             path = os.path.abspath(file_name_and_type)
             file_size = os.path.getsize(file_name_and_type)
-            port_to_send = get_port(conn)
-            conn.send(f'##download{"#"}{save_as}{"#"}{file_type}{"#"}{file_size}{"#"}{port_to_send}'.encode())
+            send_port = get_port(conn)
+            management_port = get_port(conn)
             all_data = prep_data_for_sending(path)
-            sending(conn, client_address, port_to_send, all_data)
+            conn.send(f'##download{"#"}{save_as}{"#"}{file_type}{"#"}{file_size}{"#"}{send_port}{"#"}{management_port}'.encode())
+            sending(conn, client_address, send_port, management_port, all_data)
     else:
         conn.send(bytes("request before download", "utf8"))
 
@@ -83,47 +84,38 @@ def prep_data_for_sending(path):
     seq = 0
     all_data = {}
     while True:
-        bytes_read = file.read(2 * BUFSIZ)
+        bytes_read = file.read(CHUNK_SIZE)
         if not bytes_read:
             break
-        if seq <= 9:
-            seq_num = ('0' + str(seq)).encode()
-        else:
-            seq_num = str(seq).encode()
-        bytes_to_send = bytes_read + seq_num
+        seq_num = str(seq).encode()
+        bytes_to_send = bytes_read + 'seq:'.encode() + seq_num
         all_data[seq] = bytes_to_send
         seq += 1
     file.close()
     return all_data
 
 
-def sending(conn, client_address, port_to_send, all_data):
+def sending(conn, client_address, send_port, management_port, all_data):
+    udp_sock_send = socket(AF_INET, SOCK_DGRAM)
+    udp_sock_management = socket(AF_INET, SOCK_DGRAM)
+    udp_sock_management.bind((client_address, management_port))
     while True:
-        acknowledge = conn.recv(BUFSIZ).decode("utf-8")
-        if acknowledge.__contains__('done'):
+        # nack means negative acknowledge
+        nack = udp_sock_management.recv(BUF_SIZE).decode("utf-8")
+        print("nack", nack)
+        if 'done' in nack:
             conn.send('File download completed successfully'.encode())
-            all_ports[port_to_send] = True
+            all_ports[send_port] = True
+            all_ports[management_port] = True
             check[clients[conn]] = False
             print('done')
             break
         else:
-            packets_to_send = split_packets(acknowledge.split(','))
-            for packet_num in packets_to_send:
-                if packet_num != '':
-                    udp_socket.sendto(all_data[int(packet_num)], (client_address, port_to_send))
-
-
-def split_packets(packets: list) -> set:
-    ans = []
-    for packet in packets:
-        if len(packet) > 2:
-            i = 0
-            while i < int((len(packet)) / 2) + 1:
-                ans.append(packet[i:i + 2])
-                i += 2
-        else:
-            ans.append(packet)
-    return set(ans)
+            packets_to_send = nack.split(',')
+            for packet_num in set(packets_to_send):
+                udp_sock_send.sendto(all_data[int(packet_num)], (client_address, send_port))
+    udp_sock_management.close()
+    udp_sock_send.close()
 
 
 def get_filename_and_filetype(msg: bytes):
@@ -159,17 +151,17 @@ def get_file_list(conn, msg, prefix=""):
 
 
 def private_message(conn, msg, prefix=""):
-    check = False
+    check_name = False
     for name in clients.values():
         sock = get_key(name)
         name_len = len(name)
         if msg[1:name_len + 1].decode() == name:
-            check = True
+            check_name = True
             actual_message = msg[name_len + 1:]
             sock.send(bytes(prefix, "utf8") + actual_message)
             conn.send(bytes(prefix, "utf8") + actual_message)
             break
-    if not check:
+    if not check_name:
         conn.send(f"user not found".encode())
 
 
